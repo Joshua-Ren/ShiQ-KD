@@ -215,24 +215,23 @@ class LogitsTrainer(SFTTrainer):
         return config["distillation"]["alpha"] * loss_kd + (1 - config["distillation"]["alpha"]) * original_loss
     
     def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix="eval"):
-        # 先跑原生 evaluate（得到 eval_loss 等）
         metrics = super().evaluate(
             eval_dataset=eval_dataset,
             ignore_keys=ignore_keys,
             metric_key_prefix=metric_key_prefix,
         )
 
-        # 多卡只让 rank0 做外部评测 + 记录
+        # 
         if hasattr(self.state, "is_world_process_zero") and (not self.state.is_world_process_zero):
             return metrics
 
-        # 这里跑 AMC acc（注意：用 self.model，不要用 trainer 变量）
+        # 
         amc_acc = evaluate_on_amc(self.model, student_tokenizer, max_samples=None, max_new_tokens=256)
         metrics[f"{metric_key_prefix}_amc_acc"] = float(amc_acc)
 
         gsm_acc = evaluate_on_gsm8k(self.model, student_tokenizer, split="test", max_samples=50, max_new_tokens=256)
         metrics[f"{metric_key_prefix}_gsm8k_acc"] = float(gsm_acc)
-        # 这句会进入 logging pipeline（wandb 会收）
+        # 
         self.log(metrics)
         return metrics
 
